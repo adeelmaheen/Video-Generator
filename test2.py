@@ -7,26 +7,17 @@ from gtts import gTTS
 from pydub import AudioSegment
 import tempfile
 import time
-import json
-import cv2
-import numpy as np
-from dotenv import load_dotenv
-import logging
+import subprocess
 from PyPDF2 import PdfReader
 import warnings
-import subprocess  # For ffmpeg operations
+from dotenv import load_dotenv
 warnings.filterwarnings("ignore")
 
-# Load environment variables
-load_dotenv()
-logging.getLogger("torch").setLevel(logging.ERROR)
-
 # Configuration
+load_dotenv()
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 PEXELS_API_URL = "https://api.pexels.com/v1/search"
 FPS = 24
-TEMP_DIR = "temp_files"
-os.makedirs(TEMP_DIR, exist_ok=True)
 
 def generate_background_image_pexels(prompt, output_path):
     """Fetch image from Pexels API"""
@@ -58,14 +49,26 @@ def generate_narration(text, output_path):
     except Exception as e:
         raise Exception(f"TTS generation failed: {str(e)}")
 
-def create_video_from_image(image_path, audio_path, output_path):
-    """Create video from static image and audio using ffmpeg"""
+def get_audio_duration(audio_path):
+    """Get duration of audio file using ffprobe"""
+    cmd = [
+        'ffprobe',
+        '-i', audio_path,
+        '-show_entries', 'format=duration',
+        '-v', 'quiet',
+        '-of', 'csv=p=0'
+    ]
     try:
-        # Get audio duration
-        audio = AudioSegment.from_file(audio_path)
-        duration = len(audio) / 1000  # Convert ms to seconds
+        duration = float(subprocess.check_output(cmd).decode('utf-8').strip())
+        return duration
+    except Exception as e:
+        raise Exception(f"Failed to get audio duration: {str(e)}")
+
+def create_video_with_ffmpeg(image_path, audio_path, output_path):
+    """Create video using ffmpeg"""
+    try:
+        duration = get_audio_duration(audio_path)
         
-        # Create video using ffmpeg
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite without asking
@@ -75,23 +78,17 @@ def create_video_from_image(image_path, audio_path, output_path):
             '-c:v', 'libx264',
             '-t', str(duration),
             '-pix_fmt', 'yuv420p',
-            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',  # Ensure even dimensions
+            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
             '-shortest',
             output_path
         ]
         
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return output_path
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"FFmpeg failed with code {e.returncode}: {e.stderr.decode()}")
     except Exception as e:
         raise Exception(f"Video creation failed: {str(e)}")
-
-def add_captions_to_video(video_path, audio_path, output_path, settings):
-    """Add captions to video (simplified version)"""
-    # This is a placeholder - implement your captioning logic here
-    # For now, we'll just copy the video as-is
-    import shutil
-    shutil.copyfile(video_path, output_path)
-    return output_path
 
 def read_text_file(uploaded_file):
     """Read text from uploaded file"""
@@ -121,41 +118,20 @@ def cleanup_files(*file_paths):
             pass
 
 # Streamlit UI
-st.title("Shortrocity: AI-Generated Short Videos with Pexels Images")
+st.title("Shortrocity: AI-Generated Short Videos")
 st.write("Upload a script (.txt or .pdf), enter a prompt for background image, and generate a video with narration.")
 
 # File upload and settings
 source_file = st.file_uploader("Upload your script (TXT or PDF)", type=["txt", "pdf"])
 image_prompt = st.text_input("Background Image Prompt", value="A futuristic city at night")
 
-st.header("Caption Settings")
-with st.form("settings_form"):
-    font = st.text_input("Font", value="Arial-Bold")
-    font_size = st.slider("Font Size", 50, 200, 70)
-    font_color = st.color_picker("Font Color", "#FFFFFF")
-    stroke_width = st.slider("Stroke Width", 0, 10, 2)
-    stroke_color = st.color_picker("Stroke Color", "#000000")
-    submit_settings = st.form_submit_button("Save Settings")
-
-if submit_settings or source_file:
-    settings = {
-        "font": font,
-        "font_size": font_size,
-        "font_color": font_color,
-        "stroke_width": stroke_width,
-        "stroke_color": stroke_color,
-    }
-else:
-    settings = {}
-
 if st.button("Generate Video", disabled=not source_file):
     try:
         with st.spinner("Processing..."):
-            # Create unique output directory
+            # Create temp directory
             timestamp = str(int(time.time()))
-            output_dir = os.path.join("output", timestamp)
-            os.makedirs(output_dir, exist_ok=True)
-
+            temp_dir = tempfile.mkdtemp()
+            
             # Process source file
             if source_file.type == "text/plain":
                 source_text = read_text_file(source_file)
@@ -165,54 +141,42 @@ if st.button("Generate Video", disabled=not source_file):
                 st.error("Unsupported file format.")
                 st.stop()
 
-            # Save script
-            script_path = os.path.join(output_dir, "script.txt")
-            with open(script_path, "w", encoding="utf-8") as f:
-                f.write(source_text)
-
             # Generate narration
-            narration_path = os.path.join(output_dir, "narration.mp3")
+            narration_path = os.path.join(temp_dir, "narration.mp3")
             generate_narration(source_text, narration_path)
 
             # Generate background image
-            background_path = os.path.join(output_dir, "background.jpg")
+            background_path = os.path.join(temp_dir, "background.jpg")
             generate_background_image_pexels(image_prompt, background_path)
 
             # Create video
-            raw_video_path = os.path.join(output_dir, "raw_video.mp4")
-            create_video_from_image(background_path, narration_path, raw_video_path)
-
-            # Add captions
-            final_video_path = os.path.join(output_dir, "final_video.mp4")
-            add_captions_to_video(raw_video_path, narration_path, final_video_path, settings)
+            video_path = os.path.join(temp_dir, "output.mp4")
+            create_video_with_ffmpeg(background_path, narration_path, video_path)
 
             # Display results
             st.success("Video generated successfully!")
-            st.video(final_video_path)
+            st.video(video_path)
 
             # Download buttons
-            with open(background_path, "rb") as img_file:
-                st.download_button("Download Background Image", img_file, "background.jpg")
-
-            with open(narration_path, "rb") as audio_file:
-                st.download_button("Download Narration Audio", audio_file, "narration.mp3")
-
-            with open(final_video_path, "rb") as video_file:
-                st.download_button("Download Video", video_file, "final_video.mp4")
+            with open(video_path, "rb") as video_file:
+                st.download_button(
+                    label="Download Video",
+                    data=video_file,
+                    file_name="generated_video.mp4",
+                    mime="video/mp4"
+                )
 
     except Exception as e:
         st.error(f"Error: {str(e)}")
-        st.stop()
+    finally:
+        # Cleanup temporary files
+        cleanup_files(narration_path, background_path, video_path)
 
 # Instructions sidebar
 st.sidebar.header("Instructions")
 st.sidebar.write("""
 1. Upload a script file (.txt or .pdf)
 2. Enter a background image prompt
-3. Adjust caption styles if needed
-4. Click 'Generate Video'
-5. Download the generated files
+3. Click 'Generate Video'
+4. Download your video
 """)
-
-# Cleanup temporary files on app restart
-cleanup_files(os.path.join(TEMP_DIR, "*"))

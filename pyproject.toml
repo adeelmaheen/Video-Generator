@@ -1,16 +1,23 @@
 [project]
 name = "shortrocity"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI-powered video generator with Pexels integration"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.8"  # More compatible version range
+license = {text = "MIT"}  # Recommended to add license
+authors = [
+    {name = "Your Name", email = "your@email.com"},
+]
+
 dependencies = [
     "gtts>=2.5.4",
-    "opencv-python>=4.11.0.86",
+    "opencv-python-headless>=4.9.0.80",  # Changed to headless version
     "pillow>=10.4.0",
     "pydub>=0.25.1",
     "pypdf2>=3.0.1",
     "python-dotenv>=1.1.0",
     "requests>=2.32.3",
     "streamlit>=1.45.1",
+    "ffmpeg-python>=0.2.0",  # Added Python wrapper
+    "numpy>=1.26.4",  # Required by OpenCV
 ]
