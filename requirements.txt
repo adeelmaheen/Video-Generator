@@ -1,16 +1,9 @@
-streamlit==1.14.0
-pillow==9.1.0
-moviepy==1.0.3
-pydub==0.25.1
-requests==2.28.1
-openai-whisper
-gTTS==2.2.3
-torch==2.0.1+cpu
-torchaudio==2.0.2+cpu
-torchvision==0.15.2+cpu
--f https://download.pytorch.org/whl/cpu/torch_stable.html
-altair==4.2.0
+streamlit
+requests
+Pillow
+gTTS
+moviepy
+pydub
 python-dotenv
-PyPDF2==3.0.1
-protobuf==3.20.3
-google-cloud-aiplatform
+PyPDF2
+captacity
