@@ -1,10 +1,11 @@
 import os
 import streamlit as st
 import requests
+from moviepy import *
 from io import BytesIO
 from PIL import Image
 from gtts import gTTS
-from moviepy.editor import ImageClip, AudioFileClip
+from moviepy import ImageClip, AudioFileClip
 from moviepy.config import change_settings
 from pydub import AudioSegment
 import tempfile
